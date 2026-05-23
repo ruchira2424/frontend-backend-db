@@ -14,7 +14,7 @@ import {
 import TodoForm from "./todo-form";
 
 // FIX 1: Hardcode your live Cloud Run backend API path (No trailing slash on /api)
-const API_URL = "https://run.app";
+const API_URL = "";
 
 const Home = () => {
   const [todos, setTodos] = useState([]);
