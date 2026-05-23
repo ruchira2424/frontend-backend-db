@@ -1,66 +1,81 @@
 const express = require("express");
 const router = express.Router();
 
-const Todo = require("../models/todo");
-
 // GET all todos
 router.get("/", async (req, res) => {
-  const todos = await Todo.find({ is_complete: false });
-  res.send(todos);
-});
-
-// GET todo based on ID
-router.get("/:id", async (req, res) => {
-  const todo = await Todo.findOne({ _id: req.params.id });
-  res.send(todo);
-});
-
-// POST create new todo
-router.post("/", async (req, res) => {
-  console.log(req.body);
-  const todo = new Todo({
-    title: req.body.title,
-    description: req.body.description,
-    is_complete: req.body.is_complete || false,
-    due_date: req.body.due_date || new Date(),
-  });
-  await todo.save();
-  res.send(todo);
-});
-
-// UPDATE todo
-router.patch("/:id", async (req, res) => {
+  const db = req.app.get('db');
   try {
-    const todo = await Todo.findOne({ _id: req.params.id });
-
-    if (req.body.title) {
-      todo.title = req.body.title;
-    }
-    if (req.body.description) {
-      todo.description = req.body.description;
-    }
-    if (req.body.is_complete) {
-      todo.is_complete = req.body.is_complete;
-    }
-    if (req.body.due_date) {
-      todo.due_date = req.body.due_date;
-    }
-    await todo.save();
-    res.send(todo);
-  } catch {
-    res.status(404);
-    res.send({ error: "Todo does not exist!" });
+    const result = await db.query("SELECT * FROM todos ORDER BY id ASC");
+    res.json(Array.isArray(result.rows) ? result.rows : []); 
+  } catch (err) {
+    console.error("Database error:", err.message);
+    res.status(500).json([]); 
   }
 });
 
-// DELETE todo
-router.delete("/:id", async (req, res) => {
+// GET a specific todo based on ID
+router.get("/:id", async (req, res) => {
+  const db = req.app.get('db');
   try {
-    await Todo.deleteOne({ _id: req.params.id });
+    const result = await db.query("SELECT * FROM todos WHERE id = $1", [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Todo does not exist!" });
+    }
+    res.json(result.rows[0]); // Return single object instead of array wrapper
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST create a new todo
+router.post("/", async (req, res) => {
+  const db = req.app.get('db');
+  const { title, description, is_complete, due_date } = req.body;
+  try {
+    const result = await db.query(
+      "INSERT INTO todos (title, description, is_complete, due_date) VALUES ($1, $2, $3, $4) RETURNING *", 
+      [title, description, is_complete || false, due_date || new Date()]
+    );
+    res.status(201).json(result.rows[0]); // FIX: Return single object row match
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH / UPDATE a todo
+router.patch("/:id", async (req, res) => {
+  const db = req.app.get('db');
+  const { title, description, is_complete, due_date } = req.body;
+  try {
+    const result = await db.query(
+      `UPDATE todos 
+       SET title = COALESCE($1, title), 
+           description = COALESCE($2, description), 
+           is_complete = COALESCE($3, is_complete), 
+           due_date = COALESCE($4, due_date) 
+       WHERE id = $5 RETURNING *`,
+      [title, description, is_complete, due_date, req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Todo does not exist!" });
+    }
+    res.json(result.rows[0]); // FIX: Return single object row match
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE a todo
+router.delete("/:id", async (req, res) => {
+  const db = req.app.get('db');
+  try {
+    const result = await db.query("DELETE FROM todos WHERE id = $1 RETURNING *", [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Todo does not exist!" });
+    }
     res.status(204).send();
-  } catch {
-    res.status(404);
-    res.send({ error: "Todo does not exist!" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

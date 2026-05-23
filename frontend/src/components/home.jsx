@@ -13,11 +13,13 @@ import {
 } from "reactstrap";
 import TodoForm from "./todo-form";
 
-const API_URL = process.env.REACT_APP_API_URL;
+// FIX 1: Hardcode your live Cloud Run backend API path (No trailing slash on /api)
+const API_URL = "https://run.app";
 
 const Home = () => {
   const [todos, setTodos] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
+  
   useEffect(() => {
     const getData = async () => {
       getTodos();
@@ -28,9 +30,11 @@ const Home = () => {
   const getTodos = async () => {
     try {
       const res = await axios.get(`${API_URL}/todos`);
-      setTodos(res.data);
+      // FIX 2: Safeguard against unexpected object payloads
+      setTodos(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.log(err);
+      setTodos([]); // Fallback to an empty list on network error
     }
   };
 
@@ -61,11 +65,15 @@ const Home = () => {
         <CardBody>
           <CardTitle tag="h1">Todos</CardTitle>
           <ListGroup>
-            {todos.map((todo) => {
+            {/* FIX 3: Add defensive array mapping fallback protection */}
+            {(Array.isArray(todos) ? todos : []).map((todo) => {
+              // FIX 4: Support both PostgreSQL 'id' and legacy MongoDB '_id' keys
+              const todoId = todo.id || todo._id;
+              
               return (
                 <ListGroupItem
                   title="Click this to complete."
-                  key={todo._id}
+                  key={todoId}
                   action
                   tag="a"
                 >
@@ -74,7 +82,7 @@ const Home = () => {
                       <input
                         className="form-check-input"
                         type="checkbox"
-                        onChange={() => handleClick(todo._id)}
+                        onChange={() => handleClick(todoId)}
                         value="foobar"
                         defaultChecked={todo.is_complete}
                       />

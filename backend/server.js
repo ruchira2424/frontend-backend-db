@@ -1,24 +1,35 @@
 const express = require("express");
 const cors = require('cors');
-const mongoose = require("mongoose");
-const port = 3001;
-const routes = require("./routes");
+const { Pool } = require('pg'); 
+const port = process.env.PORT || 3001;
+const routes = require("./routes/index");
 
-main().catch((err) => console.log(err));
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-async function main() {
-  const mongoURI = process.env.MONGO_URI || "mongodb://mongo:27017/todos";
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL
+});
 
-  await mongoose.connect(mongoURI, {
-    useUnifiedTopology: true,
-    useNewUrlParser: true,
-  });
-  const app = express();
-  app.use(cors());
-  app.use(express.json());
-  app.use("/api", routes);
+// IMPORTANT FIX: Expose database pool BEFORE mounting routes
+app.set('db', pool); 
 
-  app.listen(port, () => {
-    console.log(`Server is listening on port: ${port}`);
-  });
-}
+// Now mount routes safely
+app.use("/api", routes);
+
+// Create the SQL table matching your original todo schema fields
+pool.query(`
+  CREATE TABLE IF NOT EXISTS todos (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255),
+    description TEXT,
+    is_complete BOOLEAN DEFAULT false,
+    due_date TIMESTAMP
+  );
+`).then(() => console.log("PostgreSQL Todos Table is perfectly configured!"))
+  .catch(err => console.error("Table creation error:", err));
+
+app.listen(port, () => {
+  console.log("Server is successfully listening on port:", port);
+});
